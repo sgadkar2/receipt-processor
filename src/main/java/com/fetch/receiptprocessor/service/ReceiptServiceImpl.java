@@ -28,16 +28,20 @@ public class ReceiptServiceImpl implements ReceiptService{
     public ReceiptProcessResponse processReceipt(Receipt receipt) {
         
         ReceiptProcessResponse response = new ReceiptProcessResponse();
-        PointsEntity pointsEntity = new PointsEntity();
 
-        String id = UUID.randomUUID().toString();
-        pointsEntity.setId(id);
-        pointsEntity.setPoints(getPoints(receipt));
+        try{
+            PointsEntity pointsEntity = new PointsEntity();
 
-        pointsEntity = pointsRepository.save(pointsEntity);
+            String id = UUID.randomUUID().toString();
+            pointsEntity.setId(id);
+            pointsEntity.setPoints(getPoints(receipt));
 
-        response.setId(id);
+            pointsEntity = pointsRepository.save(pointsEntity);
 
+            response.setId(id);
+        }catch(Exception ex){
+            System.out.println(ex.getMessage());
+        }
 
         return response;
     }
@@ -165,13 +169,19 @@ public class ReceiptServiceImpl implements ReceiptService{
         
         GetPointsResponse response = new GetPointsResponse();
 
-        Optional<PointsEntity> pointsEntity = pointsRepository.findById(id);
+        try{
+             Optional<PointsEntity> pointsEntity = pointsRepository.findById(id);
 
-        if(pointsEntity.isPresent()){
-            response.setPoints(pointsEntity.get().getPoints());
-        }else{
+            if(pointsEntity.isPresent()){
+                response.setPoints(pointsEntity.get().getPoints());
+            }else{
+                return null;
+            }
+        }catch(Exception ex){
+            System.out.println(ex.getMessage());
             return null;
         }
+       
 
         return response;
     }

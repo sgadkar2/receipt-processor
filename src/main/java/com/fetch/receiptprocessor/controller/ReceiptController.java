@@ -27,7 +27,12 @@ public class ReceiptController {
 
         ReceiptProcessResponse response = receiptService.processReceipt(receipt);
 
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        if(response.getId() != null){
+            return new ResponseEntity<>(response, HttpStatus.OK);
+        }else{
+            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        }
+        
     }
 
     @GetMapping("/{id}/points")
