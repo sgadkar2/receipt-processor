@@ -1,11 +1,12 @@
 package com.fetch.receiptprocessor.service;
 
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +16,7 @@ import com.fetch.receiptprocessor.request.Receipt;
 import com.fetch.receiptprocessor.request.Item;
 import com.fetch.receiptprocessor.response.GetPointsResponse;
 import com.fetch.receiptprocessor.response.ReceiptProcessResponse;
+import com.fetch.receiptprocessor.configuration.Constants;
 
 import io.micrometer.common.util.StringUtils;
 
@@ -23,6 +25,8 @@ public class ReceiptServiceImpl implements ReceiptService{
 
     @Autowired
     private PointsRepository pointsRepository;
+
+    private static final Logger logger = LoggerFactory.getLogger(ReceiptServiceImpl.class);
 
     @Override
     public ReceiptProcessResponse processReceipt(Receipt receipt) {
@@ -34,24 +38,24 @@ public class ReceiptServiceImpl implements ReceiptService{
 
             String id = UUID.randomUUID().toString();
             pointsEntity.setId(id);
-            pointsEntity.setPoints(getPoints(receipt));
+            pointsEntity.setPoints(calculateTotalPoints(receipt));
 
             pointsEntity = pointsRepository.save(pointsEntity);
 
             response.setId(id);
         }catch(Exception ex){
-            System.out.println(ex.getMessage());
+            logger.error("Error occured while processing the receipt: ", ex.getMessage());
         }
 
         return response;
     }
 
-    private int getPoints(Receipt receipt){
+    private int calculateTotalPoints(Receipt receipt){
 
         int points = 0;
 
         points = countAlphanumericCharacters(receipt.getRetailer()) + checkIfRound(receipt.getTotal())
-                  + checkIfMultiple(receipt.getTotal()) + checkIf2Items(receipt.getItems() != null ? receipt.getItems().size() : 0)
+                  + checkIfMultiple(receipt.getTotal()) + checkIf2Items(receipt.getItems())
                   + checkItemDescription(receipt.getItems()) + checkPurchaseDay(receipt.getPurchaseDate())
                   + purchaseTime(receipt.getPurchaseTime());
         return points;
@@ -78,15 +82,11 @@ public class ReceiptServiceImpl implements ReceiptService{
             double totalAmount = Double.parseDouble(total);
 
             if(totalAmount == Math.floor(totalAmount)){
-                return 50;
-            }else{
-                return 0;
+                return Constants.POINTS_TOTAL_IS_WHOLE_DOLLAR;
             }
-        }else{
-            return 0;
         }
-        
 
+        return 0;
     }
 
     private int checkIfMultiple(String total){
@@ -95,19 +95,19 @@ public class ReceiptServiceImpl implements ReceiptService{
             double totalAmount = Double.parseDouble(total);
 
             if(totalAmount % 0.25 == 0){
-                return 25;
-            }else{
-                return 0;
+                return Constants.POINTS_TOTAL_IS_MULTIPLE_OF_QUARTERS;
             }
-        }else{
-            return 0;
         }
-        
+        return 0; 
     }
 
-    private int checkIf2Items(int itemLength){
+    private int checkIf2Items(List<Item> items){
 
-        return (itemLength / 2) * 5;
+        if(items == null){
+            return 0;
+        }
+
+        return (items.size() / 2) * Constants.POINTS_EVERY_PAIR_OF_ITEMS;
     }
 
     private int checkItemDescription(List<Item> items){
@@ -117,7 +117,7 @@ public class ReceiptServiceImpl implements ReceiptService{
         if(items != null){
             for(Item item : items){
                 if(item.getShortDescription().trim().length() % 3 == 0){
-                    price += Math.ceil(Double.parseDouble(item.getPrice()) * 0.2);
+                    price += Math.ceil(Double.parseDouble(item.getPrice()) * Constants.POINTS_MULTIPLIER_ITEM_LENGTH_IS_MULTIPLE_OF_THREE);
                 }
             }
         }
@@ -131,37 +131,28 @@ public class ReceiptServiceImpl implements ReceiptService{
         if(StringUtils.isNotBlank(purchaseDate)){
             int purchaseDay = Integer.parseInt(purchaseDate.split("-")[2]);
 
-            if(purchaseDay % 2 == 0){
-                return 0;
-            }else{
-                return 6;
+            if(purchaseDay % 2 == 1){
+                return Constants.POINTS_PURCHASE_DATE_IS_ODD;
             }
-        }else{
-            return 0;
         }
-        
+
+        return 0; 
     }
 
     private int purchaseTime(String purchaseTime){
 
         if(StringUtils.isNotBlank(purchaseTime)){
-            String format = "HH:mm";
 
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern(format);
-            LocalTime formattedPurchaseTime = LocalTime.parse(purchaseTime, formatter);
-
-            LocalTime startTime = LocalTime.of(14, 0);
-            LocalTime endTime = LocalTime.of(16, 0);
+            LocalTime formattedPurchaseTime = LocalTime.parse(purchaseTime);
+            LocalTime startTime = LocalTime.parse(Constants.PURCHASE_TIME_INTERVAL_START);
+            LocalTime endTime = LocalTime.parse(Constants.PURCHASE_TIME_INTERVAL_END);
 
             if(formattedPurchaseTime.isAfter(startTime) && formattedPurchaseTime.isBefore(endTime)){
-                return 10;
-            }else{
-                return 0;
+                return Constants.POINTS_PURCHASE_TIME_IS_WITHIN_INTERVAL;
             }
-        }else{
-            return 0;
         }
-        
+
+        return 0;
     }
 
     @Override
@@ -178,7 +169,7 @@ public class ReceiptServiceImpl implements ReceiptService{
                 return null;
             }
         }catch(Exception ex){
-            System.out.println(ex.getMessage());
+            logger.error("Error occured while fetching points for receipt: ", ex.getMessage());
             return null;
         }
        
